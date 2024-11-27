@@ -4,6 +4,9 @@ This project implements a diffusion model from scratch for image generation usin
 
 ![image](./example/example_output.png)
 
+## Blog post
+You can find the description of this code in my [blog post](https://ramintoosi.ir/posts/2024/11/blog-post-1/).
+
 ## Project Structure
 
 - `config.py`: Contains the configuration settings for the model.
@@ -37,6 +40,9 @@ class CONFIG:
     in_channels = 3
     num_img_to_generate = 12
 ```
+
+## Dataset
+ Download the [Anime Face Dataset](https://www.kaggle.com/datasets/splcher/animefacedataset) and put it in ```./data/anime```.
 
 ## Training
 
