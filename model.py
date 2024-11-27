@@ -334,3 +334,78 @@ class Upsample(nn.Module):
             return self.cv(x)
 
         return torch.cat([self.cv(x), self.up(x)], dim=1)
+
+
+class DownC(nn.Module):
+    """
+    Perform Down-convolution on the input using following approach.
+    1. Conv + TimeEmbedding
+    2. Conv
+    3. Skip-connection from input x.
+    4. Self-Attention
+    5. Skip-Connection from 3.
+    6. Downsampling
+    """
+
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 t_emb_dim: int = 128,  # Time Embedding Dimension
+                 num_layers: int = 2,
+                 down_sample: bool = True  # True for Downsampling
+                 ):
+
+        super().__init__()
+
+        self.num_layers = num_layers
+
+        self.conv1 = nn.ModuleList([
+            NormActConv(in_channels if i == 0 else out_channels,
+                        out_channels
+                        ) for i in range(num_layers)
+        ])
+
+        self.conv2 = nn.ModuleList([
+            NormActConv(out_channels,
+                        out_channels
+                        ) for _ in range(num_layers)
+        ])
+
+        self.te_block = nn.ModuleList([
+            TimeEmbedding(out_channels, t_emb_dim) for _ in range(num_layers)
+        ])
+
+        self.attn_block = nn.ModuleList([
+            SelfAttentionBlock(out_channels) for _ in range(num_layers)
+        ])
+
+        self.down_block = Downsample(out_channels, out_channels) if down_sample else nn.Identity()
+
+        self.res_block = nn.ModuleList([
+            nn.Conv2d(
+                in_channels if i == 0 else out_channels,
+                out_channels,
+                kernel_size=1
+            ) for i in range(num_layers)
+        ])
+
+    def forward(self, x, t_emb):
+        out = x
+
+        for i in range(self.num_layers):
+            resnet_input = out
+
+            # Resnet Block
+            out = self.conv1[i](out)
+            out = out + self.te_block[i](t_emb)[:, :, None, None]
+            out = self.conv2[i](out)
+            out = out + self.res_block[i](resnet_input)
+
+            # Self Attention
+            out_attn = self.attn_block[i](out)
+            out = out + out_attn
+
+        # Downsampling
+        out = self.down_block(out)
+
+        return out
