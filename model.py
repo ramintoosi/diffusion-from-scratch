@@ -556,3 +556,120 @@ class UpC(nn.Module):
             out = out + out_attn
 
         return out
+
+
+class Unet(nn.Module):
+    """
+    U-net architecture
+    """
+
+    def __init__(self,
+                 im_channels: int = 1,  # RGB
+                 down_ch=None,
+                 mid_ch=None,
+                 up_ch=None,
+                 down_sample=None,
+                 t_emb_dim: int = 128,
+                 num_downc_layers: int = 2,
+                 num_midc_layers: int = 2,
+                 num_upc_layers: int = 2
+                 ):
+        super(Unet, self).__init__()
+
+        if down_sample is None:
+            down_sample = [True, True, False]
+        if up_ch is None:
+            up_ch = [256, 128, 64, 16]
+        if mid_ch is None:
+            mid_ch = [256, 256, 128]
+        if down_ch is None:
+            down_ch = [32, 64, 128, 256]
+        self.im_channels = im_channels
+        self.down_ch = down_ch
+        self.mid_ch = mid_ch
+        self.up_ch = up_ch
+        self.t_emb_dim = t_emb_dim
+        self.down_sample = down_sample
+        self.num_downc_layers = num_downc_layers
+        self.num_midc_layers = num_midc_layers
+        self.num_upc_layers = num_upc_layers
+
+        self.up_sample = list(reversed(self.down_sample))  # [False, True, True]
+
+        # Initial Convolution
+        self.cv1 = nn.Conv2d(self.im_channels, self.down_ch[0], kernel_size=3, padding=1)
+
+        # Initial Time Embedding Projection
+        self.t_proj = nn.Sequential(
+            nn.Linear(self.t_emb_dim, self.t_emb_dim),
+            nn.SiLU(),
+            nn.Linear(self.t_emb_dim, self.t_emb_dim)
+        )
+
+        # DownC Blocks
+        self.downs = nn.ModuleList([
+            DownC(
+                self.down_ch[i],
+                self.down_ch[i + 1],
+                self.t_emb_dim,
+                self.num_downc_layers,
+                self.down_sample[i]
+            ) for i in range(len(self.down_ch) - 1)
+        ])
+
+        # MidC Block
+        self.mids = nn.ModuleList([
+            MidC(
+                self.mid_ch[i],
+                self.mid_ch[i + 1],
+                self.t_emb_dim,
+                self.num_midc_layers
+            ) for i in range(len(self.mid_ch) - 1)
+        ])
+
+        # UpC Block
+        self.ups = nn.ModuleList([
+            UpC(
+                self.up_ch[i],
+                self.up_ch[i + 1],
+                self.t_emb_dim,
+                self.num_upc_layers,
+                self.up_sample[i]
+            ) for i in range(len(self.up_ch) - 1)
+        ])
+
+        # Final Convolution
+        self.cv2 = nn.Sequential(
+            nn.GroupNorm(8, self.up_ch[-1]),
+            nn.Conv2d(self.up_ch[-1], self.im_channels, kernel_size=3, padding=1)
+        )
+
+    def forward(self, x, t):
+
+        out = self.cv1(x)
+
+        # Time Projection
+        t_emb = get_time_embedding(t, self.t_emb_dim)
+        t_emb = self.t_proj(t_emb)
+
+        # DownC outputs
+        down_outs = []
+
+        for down in self.downs:
+            down_outs.append(out)
+            out = down(out, t_emb)
+
+        # MidC outputs
+        for mid in self.mids:
+            out = mid(out, t_emb)
+
+        # UpC Blocks
+        for up in self.ups:
+            down_out = down_outs.pop()
+            out = up(out, down_out, t_emb)
+
+        # Final Conv
+        out = self.cv2(out)
+
+        return out
+
