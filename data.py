@@ -6,7 +6,7 @@ from PIL import Image
 import os
 
 
-class CustomMnistDataset(Dataset):
+class AnimeDataset(Dataset):
     """
     Reads the MNIST data from csv file given file path.
     """
@@ -16,7 +16,7 @@ class CustomMnistDataset(Dataset):
         :param root: a folder containing images
         :param num_datapoints: number of datapoints to use
         """
-        super(CustomMnistDataset, self).__init__()
+        super().__init__()
 
         self.image_paths = [os.path.join(root, x) for x in os.listdir(root)]
 

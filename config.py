@@ -1,5 +1,5 @@
 class CONFIG:
-    model_path = 'ddpm_unet_100.pth'
+    model_path = 'ddpm_unet_1000.pth'
     num_epochs = 50
     lr = 1e-4
     num_timesteps = 1000
