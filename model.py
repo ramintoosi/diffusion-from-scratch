@@ -409,3 +409,76 @@ class DownC(nn.Module):
         out = self.down_block(out)
 
         return out
+
+
+class MidC(nn.Module):
+    """
+    Refine the features obtained from the DownC block.
+    It refines the features using following operations:
+
+    1. Resnet Block with Time Embedding
+    2. A Series of Self-Attention + Resnet Block with Time-Embedding
+    """
+
+    def __init__(self,
+                 in_channels: int,
+                 out_channels: int,
+                 t_emb_dim: int = 128,
+                 num_layers: int = 2
+                 ):
+        super(MidC, self).__init__()
+
+        self.num_layers = num_layers
+
+        self.conv1 = nn.ModuleList([
+            NormActConv(in_channels if i == 0 else out_channels,
+                        out_channels
+                        ) for i in range(num_layers + 1)
+        ])
+
+        self.conv2 = nn.ModuleList([
+            NormActConv(out_channels,
+                        out_channels
+                        ) for _ in range(num_layers + 1)
+        ])
+
+        self.te_block = nn.ModuleList([
+            TimeEmbedding(out_channels, t_emb_dim) for _ in range(num_layers + 1)
+        ])
+
+        self.attn_block = nn.ModuleList([
+            SelfAttentionBlock(out_channels) for _ in range(num_layers)
+        ])
+
+        self.res_block = nn.ModuleList([
+            nn.Conv2d(
+                in_channels if i == 0 else out_channels,
+                out_channels,
+                kernel_size=1
+            ) for i in range(num_layers + 1)
+        ])
+
+    def forward(self, x, t_emb):
+        out = x
+
+        # First-Resnet Block
+        resnet_input = out
+        out = self.conv1[0](out)
+        out = out + self.te_block[0](t_emb)[:, :, None, None]
+        out = self.conv2[0](out)
+        out = out + self.res_block[0](resnet_input)
+
+        # Sequence of Self-Attention + Resnet Blocks
+        for i in range(self.num_layers):
+            # Self Attention
+            out_attn = self.attn_block[i](out)
+            out = out + out_attn
+
+            # Resnet Block
+            resnet_input = out
+            out = self.conv1[i + 1](out)
+            out = out + self.te_block[i + 1](t_emb)[:, :, None, None]
+            out = self.conv2[i + 1](out)
+            out = out + self.res_block[i + 1](resnet_input)
+
+        return out
