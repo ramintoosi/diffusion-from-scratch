@@ -2,6 +2,8 @@
 
 This project implements a diffusion model from scratch for image generation using PyTorch. The model is trained to generate anime-style images.
 
+![image](./example/example_output.png)
+
 ## Project Structure
 
 - `config.py`: Contains the configuration settings for the model.
