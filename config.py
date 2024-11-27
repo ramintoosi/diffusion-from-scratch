@@ -6,4 +6,4 @@ class CONFIG:
     batch_size = 32
     img_size = 48
     in_channels = 3
-    num_img_to_generate = 1
+    num_img_to_generate = 12
